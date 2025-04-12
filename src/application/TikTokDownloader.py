@@ -23,6 +23,8 @@ from src.custom import (
 )
 # from src.custom import SERVER_HOST
 # from src.custom import SERVER_PORT
+from src.custom import SERVER_HOST
+from src.custom import SERVER_PORT
 from src.custom import TEXT_REPLACEMENT
 from src.manager import Database
 from src.manager import DownloadRecorder
@@ -38,15 +40,20 @@ from src.tools import remove_empty_directories
 from src.tools import safe_pop
 from src.translation import switch_language, _
 # from .main_api_server import APIServer
+from .main_api_server import APIServer
 from .main_complete import TikTok
 
 # from typing import Type
-# from webbrowser import open
-# from flask import abort
-# from flask import request
+from typing import Type
+from typing import Union
+from webbrowser import open
+from flask import abort
+from flask import request
 
 # from .main_server import Server
 # from .main_web_UI import WebUI
+from .main_server import Server
+from .main_web_UI import WebUI
 
 __all__ = ["TikTokDownloader"]
 
@@ -118,8 +125,8 @@ class TikTokDownloader:
             (_("从浏览器获取 Cookie (TikTok)"), self.browser_cookie_tiktok),
             (_("终端交互模式"), self.complete),
             (_("后台监测模式"), self.disable_function),
-            (_("Web API 模式"), self.disable_function),
-            (_("Web UI 模式"), self.disable_function),
+            (_("Web API 模式"), self.__api_object),
+            (_("Web UI 模式"), self.__web_ui_object),
             (_("服务器部署模式"), self.disable_function),
             # (_("Web API 模式"), self.__api_object),
             # (_("Web UI 模式"), self.__web_ui_object),
@@ -146,11 +153,27 @@ class TikTokDownloader:
             "该功能正在重构，预计 5.6 版本开发完成重新开放！",
         )
 
-    # def __api_object(self):
-    #     self.server(APIServer, SERVER_HOST)
+    def __api_object(self):
+        self.server(APIServer, SERVER_HOST)
 
-    # def __web_ui_object(self):
-    #     self.server(WebUI, token=False)
+    def __web_ui_object(self):
+        try:
+            master = WebUI(self.parameter)
+            master.database = self.database
+            from flask import Flask
+            from src.custom.function import register
+            
+            self.console.print(
+                "如果您看到 WARNING: This is a development server. 提示，这并不是异常错误！\n如需关闭服务器，可以在终端按下 Ctrl + C 快捷键！",
+                style="b bright_green")
+            app = master.run_server(Flask("__main__"))
+            # register(self.recorder.close)  # DownloadRecorder没有close方法
+            open(f"http://127.0.0.1:{SERVER_PORT}")
+            app.run(host="0.0.0.0", port=SERVER_PORT)
+        except Exception as e:
+            self.console.print(f"启动Web UI模式时出错: {str(e)}", style="b bright_red")
+            import traceback
+            self.console.print(traceback.format_exc(), style="b bright_red")
 
     # def __server_object(self):
     #     self.server(Server)
@@ -296,30 +319,33 @@ class TikTokDownloader:
         except KeyboardInterrupt:
             self.running = False
 
-    # def server(
-    #         self,
-    #         server: Type[APIServer | WebUI | Server],
-    #         host="0.0.0.0",
-    #         token=True):
-    #     """
-    #     服务器模式
-    #     """
-    #     self.console.print(
-    #         "如果您看到 WARNING: This is a development server. 提示，这并不是异常错误！\n如需关闭服务器，可以在终端按下 Ctrl + C 快捷键！",
-    #         style=INFO)
-    #     master = server(self.parameter)
-    #     app = master.run_server(Flask("__main__"))
-    #     register(self.recorder.close)
-    #     if token:
-    #         app.before_request(self.verify_token)
-    #     open(f"http://127.0.0.1:{SERVER_PORT}")
-    #     app.run(host=host, port=SERVER_PORT)
+    def server(
+            self,
+            server: Type[Union[APIServer, WebUI, Server]],
+            host="0.0.0.0",
+            token=True):
+        """
+        服务器模式
+        """
+        from flask import Flask
+        from src.custom.function import verify_token, register
+        
+        self.console.print(
+            "如果您看到 WARNING: This is a development server. 提示，这并不是异常错误！\n如需关闭服务器，可以在终端按下 Ctrl + C 快捷键！",
+            style="b bright_green")
+        master = server(self.parameter)
+        app = master.run_server(Flask("__main__"))
+        register(self.recorder.close)
+        if token:
+            app.before_request(self.verify_token)
+        open(f"http://127.0.0.1:{SERVER_PORT}")
+        app.run(host=host, port=SERVER_PORT)
 
-    # @staticmethod
-    # def verify_token():
-    #     if request.method == "POST" and not verify_token(
-    #             request.json.get("token")):
-    #         return abort(403)
+    @staticmethod
+    def verify_token():
+        if request.method == "POST" and not verify_token(
+                request.json.get("token")):
+            return abort(403)
 
     async def change_config(
             self,

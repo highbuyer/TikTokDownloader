@@ -43,6 +43,7 @@ function get_parameters() {
         max_pages: $("#max_pages").val(),
         cookie: $("#cookie").val(),
         ffmpeg: $("#ffmpeg").val(),
+        disable_selenium: $("#disable_selenium:checked").val(),
     }
 }
 

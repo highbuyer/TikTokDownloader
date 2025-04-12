@@ -193,6 +193,12 @@
                                 <label for="download">启用下载功能</label>
                             </div>
                         </div>
+                        <div class="form-group">
+                            <input type="checkbox" id="disable_selenium" name="disable_selenium"
+                            {% if disable_selenium %}checked{% endif %}>                            
+                            <label for="disable_selenium">禁用浏览器自动提取：</label>                            
+                            <span class="help-text">如果遇到浏览器启动问题，请勾选此项</span>
+                        </div>
                         <ul class="actions">
                             <li><input type="button" class="button submit" value="保存配置并重新加载页面"
                                        onclick="update_parameters()">

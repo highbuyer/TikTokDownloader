@@ -1,7 +1,7 @@
 from flask import redirect
 from flask import request
-from src.DataAcquirer import Comment
-from src.DataAcquirer import Live
+from src.interface import Comment
+from src.interface import Live
 
 from .main_web_UI import WebUI
 

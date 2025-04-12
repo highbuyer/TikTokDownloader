@@ -108,6 +108,7 @@ class Parameter:
             timeout=10,
             douyin_platform=True,
             tiktok_platform=True,
+            disable_selenium=False,
             **kwargs,
     ):
         self.settings = settings
@@ -182,6 +183,7 @@ class Parameter:
             timeout=self.timeout,
             proxy=self.proxy_tiktok,
         )
+        self.disable_selenium = self.__check_bool(disable_selenium)
         # TODO: 未更新代码
         self.check_rules = {
             "accounts_urls": self.__check_accounts_urls,
@@ -209,6 +211,7 @@ class Parameter:
             "max_pages": self.__check_max_pages,
             "run_command": self.__check_run_command,
             "ffmpeg": self.__generate_ffmpeg_object,
+            "disable_selenium": self.__check_bool,
         }
         self.twc_tiktok = twc_tiktok if isinstance(twc_tiktok, str) else ""
         self.truncate = self.__check_truncate(truncate)
@@ -730,6 +733,7 @@ class Parameter:
             "max_pages": self.max_pages,
             "run_command": " ".join(self.run_command[::-1]),
             "ffmpeg": self.ffmpeg.path or "",
+            "disable_selenium": self.disable_selenium,
         }
 
     async def update_settings_data(
