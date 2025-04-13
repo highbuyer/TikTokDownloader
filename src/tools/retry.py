@@ -1,6 +1,9 @@
 from ..custom import RETRY
 from ..custom import wait
 from ..translation import _
+import time
+import random
+import ssl
 
 __all__ = ["PrivateRetry"]
 
@@ -15,13 +18,28 @@ class PrivateRetry:
         async def inner(self, *args, **kwargs):
             finished = kwargs.pop("finished", False)
             for i in range(self.max_retry):
-                if result := await function(self, *args, **kwargs):
-                    return result
-                self.log.warning(_("正在进行第 {index} 次重试").format(index=i + 1))
-                await wait()
-            if not (result := await function(self, *args, **kwargs)) and finished:
-                self.finished = True
-            return result
+                try:
+                    if result := await function(self, *args, **kwargs):
+                        return result
+                except ssl.SSLError as e:
+                    self.log.warning(_("SSL错误: {error}，正在尝试重试").format(error=str(e)))
+                except Exception as e:
+                    self.log.warning(_("请求出错: {error}，正在尝试重试").format(error=str(e)))
+                
+                # 增加指数退避策略，随着重试次数增加等待时间
+                wait_time = 1 + i * 2 + random.uniform(0, 1)
+                self.log.warning(_("正在进行第 {index} 次重试，等待 {wait:.1f} 秒").format(index=i + 1, wait=wait_time))
+                await wait(wait_time)
+                
+            try:
+                if not (result := await function(self, *args, **kwargs)) and finished:
+                    self.finished = True
+                return result
+            except Exception as e:
+                self.log.error(_("最终尝试失败: {error}").format(error=str(e)))
+                if finished:
+                    self.finished = True
+                return None
 
         return inner
 
@@ -30,10 +48,12 @@ class PrivateRetry:
         async def inner(*args, **kwargs):
             if r := await function(*args, **kwargs):
                 return r
-            for _ in range(RETRY):
+            for i in range(RETRY):
                 if r := await function(*args, **kwargs):
                     return r
-                await wait()
+                # 增加等待时间，避免频繁请求
+                wait_time = 1 + i * 0.5 + random.uniform(0, 0.5)
+                await wait(wait_time)
             return r
 
         return inner

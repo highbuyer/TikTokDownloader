@@ -8,16 +8,23 @@ if TYPE_CHECKING:
     from ..tools import ColorfulConsole
 
 
-async def wait() -> None:
+async def wait(seconds=None) -> None:
     """
     设置网络请求间隔时间，仅对获取数据生效，不影响下载文件
+    
+    Args:
+        seconds: 指定等待的秒数，如果不指定则使用随机间隔
     """
-    # 随机延时
-    await sleep(randint(15, 45) * 0.1)
-    # 固定延时
-    # await sleep(2)
-    # 取消延时
-    # pass
+    if seconds is not None:
+        # 使用指定的时间
+        await sleep(seconds)
+    else:
+        # 随机延时
+        await sleep(randint(15, 45) * 0.1)
+        # 固定延时
+        # await sleep(2)
+        # 取消延时
+        # pass
 
 
 def failure_handling() -> bool:

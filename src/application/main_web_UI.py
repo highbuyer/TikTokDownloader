@@ -6,6 +6,14 @@ import asyncio
 
 from .main_complete import TikTok
 
+# 导入平台检测模块
+import sys
+from pathlib import Path
+
+# 确保导入路径正确
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+from src.custom.platform_ua import get_platform_info, get_current_platform
+
 __all__ = ["WebUI"]
 
 
@@ -15,6 +23,14 @@ class WebUI(TikTok):
         super().__init__(parameter, self.database)
         self.cookie = parameter.cookie
         self.preview = parameter.preview
+        
+        # 初始化平台相关的User-Agent
+        platform_info = get_platform_info()
+        current_platform = get_current_platform()
+        platform_data = platform_info[current_platform]
+        self.platform_ua = platform_data["browser_info"]["User-Agent"]
+        self.platform_browser = f'"{platform_data["browser_info"]["browser_name"]}";v="{platform_data["browser_info"]["browser_version"]}"'
+        
         self.error_works = {
             "text": "获取作品数据失败！",
             "author": None,
@@ -255,9 +271,6 @@ class WebUI(TikTok):
         # 生成随机iid
         iid = ''.join(random.choices('0123456789', k=16))
         
-        # 生成时间戳
-        timestamp = str(int(time.time()))
-        
         # 构建API请求必要参数
         params = {
             "type_id": "0",
@@ -278,7 +291,7 @@ class WebUI(TikTok):
             "iid": iid,
             "_signature": self._generate_signature(),
             "verifyFp": self._generate_verify_fp(),
-            "timestamp": timestamp
+            "timestamp": self._generate_timestamp()
         }
         
         # 构建API URLs
@@ -349,8 +362,9 @@ class WebUI(TikTok):
             query_string = "&".join([f"{k}={v}" for k, v in api["params"].items()])
             api["url"] = f"{api['url']}?{query_string}"
         
+        # 使用实例变量
         base_headers = {
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": self.platform_ua,  # 使用平台检测模块提供的User-Agent
             "Referer": "https://live.douyin.com/",
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -361,9 +375,9 @@ class WebUI(TikTok):
             "Connection": "keep-alive",
             "Content-Type": "application/json;charset=UTF-8",
             "dnt": "1",
-            "sec-ch-ua": '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
+            "sec-ch-ua": self.platform_browser,  # 使用平台相应的浏览器信息
             "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Linux"'
+            "sec-ch-ua-platform": f'"{get_current_platform().capitalize()}"'  # 动态设置平台
         }
         
         # 添加Cookie（如果有）
@@ -378,7 +392,7 @@ class WebUI(TikTok):
             
             third_party_response = httpx.get(
                 api_url, 
-                headers={"User-Agent": base_headers["User-Agent"]}, 
+                headers=base_headers, 
                 timeout=30, 
                 follow_redirects=True
             )
@@ -584,7 +598,7 @@ class WebUI(TikTok):
             self.logger.info(f"尝试移动端API: {mobile_url}")
             
             mobile_headers = {
-                "User-Agent": "Mozilla/5.0 (Linux; Android 11; SM-G9900) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+                "User-Agent": "Mozilla/5.0 (Linux; Android 11; SM-G9900) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",  # 使用移动端User-Agent
                 "Referer": "https://live.douyin.com/",
                 "Accept": "application/json, text/plain, */*",
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
@@ -649,7 +663,7 @@ class WebUI(TikTok):
             options.add_argument("--disable-infobars")
             
             # 设置user-agent
-            options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            options.add_argument(f"user-agent={self.platform_ua}")  # 使用平台检测模块提供的User-Agent
             
             # 创建Chrome实例
             driver = webdriver.Chrome(options=options)
@@ -1032,3 +1046,8 @@ class WebUI(TikTok):
             parts.append(''.join(random.choice(string.ascii_letters + string.digits) for _ in range(length)))
         
         return f"{prefix}{middle}_{timestamp}_{'_'.join(parts)}"
+
+    def _generate_timestamp(self):
+        """生成时间戳"""
+        import time
+        return str(int(time.time()))

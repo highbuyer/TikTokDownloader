@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from ..custom import ERROR
+from ..custom.platform_ua import update_settings_with_platform_ua, get_platform_info, get_current_platform
 from ..translation import _
 
 if TYPE_CHECKING:
@@ -86,46 +87,25 @@ class Settings:
         "ffmpeg": "",
         "douyin_platform": True,
         "tiktok_platform": True,
-        "browser_info": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                          "Chrome/131.0.0.0 Safari/537.36",
-            "pc_libra_divert": "Windows",
-            "browser_platform": "Win32",
-            "browser_name": "Chrome",
-            "browser_version": "126.0.0.0",
-            "engine_name": "Blink",
-            "engine_version": "126.0.0.0",
-            "os_name": "Windows",
-            "os_version": "10",
-            "webid": "",
-        },
-        "browser_info_tiktok": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                          "Chrome/131.0.0.0 Safari/537.36",
-            "app_language": "zh-Hans",
-            "browser_language": "zh-SG",
-            "browser_name": "Mozilla",
-            "browser_platform": "Win32",
-            "browser_version": "5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                               "Chrome/131.0.0.0 Safari/537.36",
-            "language": "zh-Hans",
-            "os": "windows",
-            "priority_region": "CN",
-            "region": "US",
-            "tz_name": "Asia/Shanghai",
-            "webcast_language": "zh-Hans",
-            "device_id": "",
-        },
+        "browser_info": {},  # 将通过platform_ua模块填充
+        "browser_info_tiktok": {},  # 将通过platform_ua模块填充
     }  # 默认配置
 
     def __init__(self, root: "Path", console: "ColorfulConsole"):
         self.file = root.joinpath("./settings.json")  # 配置文件
         self.console = console
+        # 根据当前平台初始化默认浏览器配置
+        platform_info = get_platform_info()
+        current_platform = get_current_platform()
+        if current_platform in platform_info:
+            self.default["browser_info"] = platform_info[current_platform]["browser_info"].copy()
+            self.default["browser_info_tiktok"] = platform_info[current_platform]["browser_info_tiktok"].copy()
 
     def __create(self) -> dict:
         """创建默认配置文件"""
+        default_settings = update_settings_with_platform_ua(self.default.copy())
         with self.file.open("w", encoding=self.encode) as f:
-            dump(self.default, f, indent=4, ensure_ascii=False)
+            dump(default_settings, f, indent=4, ensure_ascii=False)
         self.console.info(
             _(
                 "创建默认配置文件 settings.json 成功！\n"
@@ -133,20 +113,26 @@ class Settings:
                 "建议根据实际使用需求修改配置文件 settings.json！\n"
             ),
         )
-        return self.default
+        return default_settings
 
     def read(self) -> dict:
         """读取配置文件，如果没有配置文件，则生成配置文件"""
         try:
             if self.file.exists():
                 with self.file.open("r", encoding=self.encode) as f:
-                    return self.__check(load(f))
+                    settings_data = self.__check(load(f))
+                    # 根据当前平台更新User-Agent
+                    settings_data = update_settings_with_platform_ua(settings_data)
+                    # 保存更新后的设置
+                    self.update(settings_data)
+                    return settings_data
             return self.__create()  # 生成的默认配置文件必须设置 cookie 才可以正常运行
         except JSONDecodeError:
             self.console.error(
                 _("配置文件 settings.json 格式错误，请检查 JSON 格式！"),
             )
-            return self.default  # 读取配置文件发生错误时返回空配置
+            default_settings = update_settings_with_platform_ua(self.default.copy())
+            return default_settings  # 读取配置文件发生错误时返回带平台UA的默认配置
 
     def __check(self, data: dict) -> dict:
         default_keys = self.default.keys()
