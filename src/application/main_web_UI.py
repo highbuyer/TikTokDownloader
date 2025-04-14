@@ -1,6 +1,9 @@
 from flask import render_template
 from flask import request
 from flask import url_for
+from flask import Response, jsonify
+import requests
+import urllib.parse
 from src.interface import Live
 import asyncio
 
@@ -80,17 +83,39 @@ class WebUI(TikTok):
         if isinstance(data, str):
             return self.error_works | {"text": "后台下载作品成功！", "preview": data}
         data = data[0]
+        
+        # 处理图集链接，确保返回JSON数组
+        if data["type"] == "视频":
+            downloads = data["downloads"]
+        else:
+            # 确保图集链接是列表格式
+            if isinstance(data["downloads"], str):
+                # 如果是字符串，尝试多种分隔符分割
+                if ',' in data["downloads"]:
+                    downloads = data["downloads"].split(',')
+                else:
+                    downloads = data["downloads"].split()
+                # 去除空字符串
+                downloads = [url.strip() for url in downloads if url.strip()]
+            elif isinstance(data["downloads"], list):
+                # 已经是列表，直接使用
+                downloads = data["downloads"]
+            else:
+                # 其他情况，转换为列表
+                downloads = [str(data["downloads"])]
+        
+        # 获取预览图链接
+        preview_link = data["origin_cover"] if data["type"] == "视频" else (downloads[0] if downloads else "")
+        
         return {
             "text": "获取作品数据成功！",
             "author": data["nickname"],
             "describe": data["desc"],
-            "download": data["downloads"]
-            if data["type"] == "视频"
-            else (d := data["downloads"].split()),
+            "download": downloads,
             "music": data["music_url"],
             "origin": data["origin_cover"],
             "dynamic": data["dynamic_cover"],
-            "preview": data["origin_cover"] or d[0],
+            "preview": preview_link,
         }
 
     def deal_single_works(self, url: str, download: bool) -> dict:
@@ -127,8 +152,32 @@ class WebUI(TikTok):
         
         # 调用handle_detail但捕获所有异常
         try:
+            # 如果是直接下载模式，我们仍然需要获取作品信息用于前端显示
+            # not download参数传给_handle_detail，但我们记录download标记
             result = loop.run_until_complete(self._handle_detail(ids, False, recorder, not download))
-            return self.generate_works_data(result) if result else {}
+            
+            # 构建响应数据
+            response_data = self.generate_works_data(result) if result else {}
+            
+            # 在下载模式下，添加下载状态信息
+            if download:
+                self.logger.info(f"启动后台下载作品: {url}")
+                response_data["download_status"] = "已启动后台下载任务"
+                
+                # 在后台线程中执行下载（不阻塞主线程）
+                # 注意: 此处实际上没有真正实现后台下载，因为_handle_detail的第四个参数是api参数
+                # 设置为False时才会触发下载，而上面的调用传入的是not download
+                # 这里我们使用线程池来实现真正的后台下载
+                import concurrent.futures
+                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                executor.submit(
+                    lambda: loop.run_until_complete(
+                        self._handle_detail(ids, False, recorder, False)
+                    )
+                )
+                executor.shutdown(wait=False)  # 不等待线程完成
+                
+            return response_data
         except Exception as e:
             self.logger.error(f"处理作品数据时出错: {str(e)}")
             return {}
@@ -1005,6 +1054,74 @@ class WebUI(TikTok):
             
             except Exception as e:
                 return {"success": False, "message": f"提取失败: {str(e)}"}
+
+        @app.route('/proxy_download', methods=['POST'])
+        def proxy_download():
+            data = request.json
+            url = data.get('url')
+            filename = data.get('filename', '抖音视频.mp4')
+            
+            if not url:
+                return jsonify({'error': '未提供URL参数'}), 400
+            
+            try:
+                self.logger.info(f"开始代理下载: {url}")
+                
+                # 获取下载路径配置
+                from src.config.settings import Settings
+                settings = Settings()
+                
+                # 获取下载根目录
+                root_dir = settings.get('root')
+                if not root_dir:
+                    self.logger.error("下载失败: 未配置下载根目录")
+                    return jsonify({'error': '未配置下载根目录，请在设置中配置root参数'}), 500
+                
+                # 创建目录（如果不存在）
+                import os
+                os.makedirs(root_dir, exist_ok=True)
+                
+                # 完整的文件保存路径
+                file_path = os.path.join(root_dir, filename)
+                
+                # 使用requests获取文件内容并直接保存
+                response = requests.get(url, stream=True, timeout=30)
+                
+                # 检查响应状态
+                if response.status_code != 200:
+                    self.logger.error(f"代理下载失败，服务器返回: {response.status_code}")
+                    return jsonify({
+                        'error': f'远程服务器返回错误: {response.status_code}',
+                        'details': response.reason
+                    }), 500
+                
+                # 保存文件到本地
+                with open(file_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                
+                self.logger.info(f"文件已成功下载到: {file_path}")
+                
+                # 返回成功消息和下载位置
+                return jsonify({
+                    'success': True,
+                    'message': f'文件已成功下载到服务器',
+                    'file_path': file_path
+                })
+                
+            except requests.exceptions.Timeout:
+                self.logger.error(f"代理下载超时: {url}")
+                return jsonify({'error': '下载请求超时'}), 504
+            except requests.exceptions.ConnectionError:
+                self.logger.error(f"代理下载连接错误: {url}")
+                return jsonify({'error': '连接远程服务器失败'}), 502
+            except Exception as e:
+                self.logger.error(f"代理下载异常: {str(e)}")
+                return jsonify({
+                    'error': '代理下载失败', 
+                    'details': str(e)
+                }), 500
 
         return app
 
