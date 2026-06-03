@@ -1,17 +1,13 @@
 from json.decoder import JSONDecodeError
-from typing import TYPE_CHECKING
-from typing import Union
+from ssl import SSLError
+from typing import TYPE_CHECKING, Union
 
-from httpx import HTTPStatusError
-from httpx import NetworkError
-from httpx import RequestError
-from httpx import TimeoutException
+from httpx import HTTPStatusError, NetworkError, RequestError, TimeoutException
 
 from ..translation import _
 
 if TYPE_CHECKING:
-    from ..record import BaseLogger
-    from ..record import LoggerManager
+    from ..record import BaseLogger, LoggerManager
 
 __all__ = [
     "capture_error_params",
@@ -24,8 +20,8 @@ def capture_error_params(function):
         try:
             return await function(logger, *args, **kwargs)
         except (
-                JSONDecodeError,
-                UnicodeDecodeError,
+            JSONDecodeError,
+            UnicodeDecodeError,
         ):
             logger.error(_("响应内容不是有效的 JSON 数据"))
         except HTTPStatusError as e:
@@ -34,7 +30,10 @@ def capture_error_params(function):
             logger.error(_("网络异常：{error}").format(error=e))
         except TimeoutException as e:
             logger.error(_("请求超时：{error}").format(error=e))
-        except RequestError as e:
+        except (
+            RequestError,
+            SSLError,
+        ) as e:
             logger.error(_("网络异常：{error}").format(error=e))
         return None
 
@@ -53,7 +52,10 @@ def capture_error_request(function):
             self.log.error(_("网络异常：{error}").format(error=e))
         except TimeoutException as e:
             self.log.error(_("请求超时：{error}").format(error=e))
-        except RequestError as e:
+        except (
+            RequestError,
+            SSLError,
+        ) as e:
             self.log.error(_("网络异常：{error}").format(error=e))
         return None
 

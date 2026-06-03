@@ -1,34 +1,8 @@
-*.db
-*.json
-*.log
-*.xlsx
-*.csv
-*.spec
-# 忽略所有 __pycache__ 文件夹
 __pycache__/
-# 忽略所有 .pyc 文件
 *.pyc
-# 忽略所有 .pyo 文件
-*.pyo
-# 忽略所有 .pyd 文件
-*.pyd
-# 忽略所有 .pyw 文件
-*.pyw
-# 忽略 IDE 配置文件
-.vscode/
-.idea/
-
-# 忽略日志和临时文件
-*.log
-*.tmp
-
-# 忽略依赖文件夹
-node_modules/
-venv/
-
-# 忽略构建输出文件夹
-dist/
-build/
-
-# 忽略所有 .DS_Store 文件
-.DS_Store
+/.venv/
+/.ruff_cache/
+/.idea/
+/.run/
+/Volume/
+!/.github/

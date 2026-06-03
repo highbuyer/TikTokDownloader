@@ -1,9 +1,10 @@
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from openpyxl import Workbook
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
+from openpyxl.utils.exceptions import IllegalCharacterError
 
+from ..translation import _
 from .text import BaseTextLogger
 
 if TYPE_CHECKING:
@@ -18,15 +19,15 @@ class XLSXLogger(BaseTextLogger):
     __type = "xlsx"
 
     def __init__(
-            self,
-            root: Path,
-            title_line: tuple,
-            field_keys: tuple,
-            console: "ColorfulConsole",
-            old=None,
-            name="Solo_Download",
-            *args,
-            **kwargs,
+        self,
+        root: Path,
+        title_line: tuple,
+        field_keys: tuple,
+        console: "ColorfulConsole",
+        old=None,
+        name="Download",
+        *args,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.console = console
@@ -44,8 +45,11 @@ class XLSXLogger(BaseTextLogger):
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        self.book.save(self.path)
-        self.book.close()
+        try:
+            if exc_type is None:
+                self.book.save(self.path)
+        finally:
+            self.book.close()
 
     def title(self):
         if not self.sheet["A1"].value:
@@ -54,4 +58,11 @@ class XLSXLogger(BaseTextLogger):
                 self.sheet.cell(row=1, column=col, value=value)
 
     async def _save(self, data, *args, **kwargs):
-        self.sheet.append(data)
+        try:
+            self.sheet.append(data)
+        except IllegalCharacterError as e:
+            self.console.warning(
+                _("数据包含非法字符，保存数据失败：{error}").format(error=e)
+            )
+        except Exception as e:
+            self.console.error(_("保存数据发生异常：{error}").format(error=e))

@@ -3,9 +3,10 @@ from .function import (
     failure_handling,
     condition_filter,
     suspend,
-    verify_token,
+    is_valid_token,
 )
 from .internal import (
+    DISCLAIMER_TEXT,
     PROJECT_ROOT,
     VERSION_MAJOR,
     VERSION_MINOR,
@@ -33,7 +34,7 @@ from .internal import (
     IMAGE_TIKTOK_INDEX,
     VIDEOS_INDEX,
     DYNAMIC_COVER_INDEX,
-    ORIGIN_COVER_INDEX,
+    STATIC_COVER_INDEX,
     MUSIC_INDEX,
     COMMENT_IMAGE_INDEX,
     COMMENT_STICKER_INDEX,
@@ -49,10 +50,11 @@ from .internal import (
     SEARCH_AVATAR_INDEX,
     MUSIC_COLLECTION_COVER_INDEX,
     MUSIC_COLLECTION_DOWNLOAD_INDEX,
+    __VERSION__,
+    BLANK_HEADERS,
 )
 from .static import (
     MAX_WORKERS,
-    DESCRIPTION_LENGTH,
     TEXT_REPLACEMENT,
     SERVER_HOST,
     SERVER_PORT,
@@ -65,7 +67,6 @@ from .static import (
     PROGRESS,
     DEBUG,
     COOKIE_UPDATE_INTERVAL,
-    MAX_FILENAME_LENGTH,
     FILE_SIGNATURES,
     FILE_SIGNATURES_LENGTH,
 )

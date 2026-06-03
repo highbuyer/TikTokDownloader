@@ -1,16 +1,15 @@
 from json import dumps
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
-from typing import Union
+from typing import TYPE_CHECKING, Union
 from urllib.parse import quote
 
 from src.interface.template import API
-from src.testers import Params
-from src.tools import TikTokDownloaderError
+from src.tools import DownloaderError
 from src.translation import _
 
 if TYPE_CHECKING:
     from src.config import Parameter
+    from src.testers import Params
 
 
 class Search(API):
@@ -133,32 +132,26 @@ class Search(API):
     }
 
     def __init__(
-            self,
-            params: Union["Parameter", Params],
-            cookie: str = None,
-            proxy: str = None,
-            keyword: str = ...,
-            channel: int = 0,
-            pages: int = 99999,
-            sort_type: int = 0,
-            publish_time: int = 0,
-            duration: int = 0,
-            search_range: int = 0,
-            content_type: int = 0,
-            douyin_user_fans: int = 0,
-            douyin_user_type: int = 0,
-            cursor: int = 0,
-            count: int = 10,
-            *args,
-            **kwargs,
+        self,
+        params: Union["Parameter", "Params"],
+        cookie: str = "",
+        proxy: str = None,
+        keyword: str = ...,
+        channel: int = 0,
+        pages: int = 99999,
+        sort_type: int = 0,
+        publish_time: int = 0,
+        duration: int = 0,
+        search_range: int = 0,
+        content_type: int = 0,
+        douyin_user_fans: int = 0,
+        douyin_user_type: int = 0,
+        offset: int = 0,
+        count: int = 10,
+        *args,
+        **kwargs,
     ):
-        super().__init__(
-            params,
-            cookie,
-            proxy,
-            *args,
-            **kwargs,
-        )
+        super().__init__(params, cookie, proxy, *args, **kwargs)
         self.keyword = keyword
         self.channel = self.channel_map.get(channel, self.search_params[-1])
         self.pages = pages
@@ -169,7 +162,7 @@ class Search(API):
         self.search_range = search_range
         self.douyin_user_fans = self.douyin_user_fans_map.get(douyin_user_fans, [""])
         self.douyin_user_type = self.douyin_user_type_map.get(douyin_user_type, [""])
-        self.cursor = cursor
+        self.offset = offset
         self.count = count
         self.type = self.channel.type
         self.api = self.channel.api
@@ -189,7 +182,7 @@ class Search(API):
 
     async def run(self, single_page=False, *args, **kwargs):
         if not self.api:
-            raise TikTokDownloaderError
+            raise DownloaderError
         self.set_referer(
             f"{self.domain}root/search/{quote(self.keyword)}?type={self.type}"
         )
@@ -209,20 +202,20 @@ class Search(API):
                     **kwargs,
                 )
             case _:
-                raise TikTokDownloaderError
+                raise DownloaderError
         return self.response
 
     def generate_filter_selected(
-            self,
+        self,
     ) -> str | None:
         if any(
-                (
+            (
                 self.sort_type,
                 self.publish_time,
                 self.duration,
                 self.search_range,
                 self.content_type,
-                )
+            )
         ):
             return dumps(
                 {
@@ -234,15 +227,16 @@ class Search(API):
                 },
                 separators=(",", ":"),
             )
+        return None
 
     def generate_search_filter_value(
-            self,
+        self,
     ) -> str | None:
         if any(
-                (
+            (
                 self.douyin_user_fans,
                 self.douyin_user_type,
-                )
+            )
         ):
             return dumps(
                 {
@@ -251,19 +245,22 @@ class Search(API):
                 },
                 separators=(",", ":"),
             )
+        return None
 
     def _generate_params_general(
-            self,
+        self,
     ) -> dict:
         params = self.params | {
+            "pc_search_top_1_params": '{"enable_ai_search_top_1":1}',
             "search_channel": self.channel.channel,
             "enable_history": "1",
             "keyword": self.keyword,
-            "search_source": "tab_search",
+            "search_source": "switch_tab",
             "query_correct_type": "1",
             "is_filter_search": "0",
             "from_group_id": "",
-            "offset": self.cursor,
+            "disable_rs": "0",
+            "offset": self.offset,
             "count": self.count,
             "need_filter_settings": "0",
             "list_type": "single",
@@ -280,17 +277,19 @@ class Search(API):
         return params
 
     def _generate_params_video(
-            self,
+        self,
     ) -> dict:
         params = self.params | {
+            "pc_search_top_1_params": '{"enable_ai_search_top_1":1}',
             "search_channel": self.channel.channel,
             "enable_history": "1",
             "keyword": self.keyword,
-            "search_source": "tab_search",
+            "search_source": "switch_tab",
             "query_correct_type": "1",
             "is_filter_search": "0",
             "from_group_id": "",
-            "offset": self.cursor,
+            "disable_rs": "0",
+            "offset": self.offset,
             "count": self.count,
             "need_filter_settings": "0",
             "list_type": "single",
@@ -322,7 +321,7 @@ class Search(API):
         return params
 
     def _generate_params_user(
-            self,
+        self,
     ) -> dict:
         params = self._generate_params_live()
         if self.search_filter_value:
@@ -333,16 +332,18 @@ class Search(API):
         return params
 
     def _generate_params_live(
-            self,
+        self,
     ) -> dict:
         params = self.params | {
+            "pc_search_top_1_params": '{"enable_ai_search_top_1":1}',
             "search_channel": self.channel.channel,
             "keyword": self.keyword,
-            "search_source": "tab_search",
+            "search_source": "switch_tab",
             "query_correct_type": "1",
             "is_filter_search": "0",
             "from_group_id": "",
-            "offset": self.cursor,
+            "disable_rs": "0",
+            "offset": self.offset,
             "count": self.count,
             "need_filter_settings": "0",
             "list_type": "single",
@@ -354,21 +355,25 @@ class Search(API):
         return params
 
     def check_response(
-            self,
-            data_dict: dict,
-            data_key: str,
-            error_text="",
-            cursor="cursor",
-            has_more="has_more",
-            *args,
-            **kwargs,
+        self,
+        data_dict: dict,
+        data_key: str,
+        error_text="",
+        cursor="cursor",
+        has_more="has_more",
+        *args,
+        **kwargs,
     ):
         try:
-            if not (d := data_dict[data_key]):
+            if not isinstance(d := data_dict[data_key], list):
                 self.log.warning(error_text)
                 self.finished = True
+            elif len(d) == 0:
+                if not self.response:
+                    self.response.append([])
+                self.finished = True
             else:
-                self.cursor = data_dict[cursor]
+                self.offset = data_dict[cursor]
                 self.search_id = data_dict["log_pb"]["impr_id"]
                 match self.type:
                     case "general" | "video" | "user":
@@ -379,7 +384,7 @@ class Search(API):
                             "lives",
                         )
                     case _:
-                        raise TikTokDownloaderError
+                        raise DownloaderError
                 self.finished = not data_dict[has_more]
         except KeyError:
             self.log.error(
@@ -388,18 +393,22 @@ class Search(API):
             self.finished = True
 
     def append_response_video(
-            self,
-            data: list[dict],
-            key: str,
+        self,
+        data: list[dict],
+        key: str,
     ) -> None:
         self.append_response([i[key] for i in data])
 
 
 async def test():
+    from src.testers import Params
+
     async with Params() as params:
+        Search.params["uifid"] = params.uifid
+        Search.params["msToken"] = params.msToken_tiktok
         i = Search(
             params,
-            keyword="玉足",
+            keyword="",
             channel=3,
             sort_type=2,
             publish_time=7,

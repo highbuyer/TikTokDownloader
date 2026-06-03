@@ -1,18 +1,12 @@
-from datetime import date
-from datetime import datetime
-from datetime import timedelta
-from typing import Callable
-from typing import Coroutine
-from typing import TYPE_CHECKING
-from typing import Type
-from typing import Union
+from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING, Callable, Coroutine, Type, Union
 
 from src.interface.template import API
-from src.testers import Params
 from src.translation import _
 
 if TYPE_CHECKING:
     from src.config import Parameter
+    from src.testers import Params
 
 
 class Account(API):
@@ -20,31 +14,26 @@ class Account(API):
     favorite_api = f"{API.domain}aweme/v1/web/aweme/favorite/"
 
     def __init__(
-            self,
-            params: Union["Parameter", Params],
-            cookie: str | dict = None,
-            proxy: str = None,
-            sec_user_id: str = ...,
-            tab="post",
-            earliest: str | float | int = "",
-            latest="",
-            pages: int = None,
-            cursor=0,
-            count=18,
-            *args,
-            **kwargs,
+        self,
+        params: Union["Parameter", "Params"],
+        cookie: str = "",
+        proxy: str = None,
+        sec_user_id: str = ...,
+        tab="post",
+        earliest: str | float | int = "",
+        latest: str | float | int = "",
+        pages: int = None,
+        cursor=0,
+        count=18,
+        *args,
+        **kwargs,
     ):
-        super().__init__(
-            params,
-            cookie,
-            proxy,
-            *args,
-            **kwargs,
-        )
+        super().__init__(params, cookie, proxy, *args, **kwargs)
         self.sec_user_id = sec_user_id
         self.api, self.favorite, self.pages = self.check_type(
             tab, pages or params.max_pages
         )
+        # TODO: 重构数据验证逻辑
         self.latest: date = self.check_latest(latest)
         self.earliest: date = self.check_earliest(earliest)
         self.cursor = cursor
@@ -52,19 +41,19 @@ class Account(API):
         self.text = _("账号喜欢作品") if self.favorite else _("账号发布作品")
 
     async def run(
-            self,
-            referer: str = None,
-            single_page=False,
-            data_key: str = "aweme_list",
-            error_text="",
-            cursor="max_cursor",
-            has_more="has_more",
-            params: Callable = lambda: {},
-            data: Callable = lambda: {},
-            method="GET",
-            headers: dict = None,
-            *args,
-            **kwargs,
+        self,
+        referer: str = None,
+        single_page=False,
+        data_key: str = "aweme_list",
+        error_text="",
+        cursor="max_cursor",
+        has_more="has_more",
+        params: Callable = lambda: {},
+        data: Callable = lambda: {},
+        method="GET",
+        headers: dict = None,
+        *args,
+        **kwargs,
     ):
         if self.favorite:
             self.set_referer(f"{self.domain}user/{self.sec_user_id}?showTab=like")
@@ -108,17 +97,17 @@ class Account(API):
         raise ValueError
 
     async def run_single(
-            self,
-            data_key: str = "aweme_list",
-            error_text="",
-            cursor="max_cursor",
-            has_more="has_more",
-            params: Callable = lambda: {},
-            data: Callable = lambda: {},
-            method="GET",
-            headers: dict = None,
-            *args,
-            **kwargs,
+        self,
+        data_key: str = "aweme_list",
+        error_text="",
+        cursor="max_cursor",
+        has_more="has_more",
+        params: Callable = lambda: {},
+        data: Callable = lambda: {},
+        method="GET",
+        headers: dict = None,
+        *args,
+        **kwargs,
     ):
         await super().run_single(
             data_key,
@@ -134,18 +123,18 @@ class Account(API):
         )
 
     async def run_batch(
-            self,
-            data_key: str = "aweme_list",
-            error_text="",
-            cursor="max_cursor",
-            has_more="has_more",
-            params: Callable = lambda: {},
-            data: Callable = lambda: {},
-            method="GET",
-            headers: dict = None,
-            callback: Type[Coroutine] = None,
-            *args,
-            **kwargs,
+        self,
+        data_key: str = "aweme_list",
+        error_text="",
+        cursor="max_cursor",
+        has_more="has_more",
+        params: Callable = lambda: {},
+        data: Callable = lambda: {},
+        method="GET",
+        headers: dict = None,
+        callback: Type[Coroutine] = None,
+        *args,
+        **kwargs,
     ):
         await super().run_batch(
             data_key,
@@ -165,20 +154,21 @@ class Account(API):
     async def early_stop(self):
         """如果获取数据的发布日期已经早于限制日期，就不需要再获取下一页的数据了"""
         if (
-                not self.favorite
-                and self.earliest
-                > datetime.fromtimestamp(max(int(self.cursor) / 1000, 0)).date()
+            not self.favorite
+            and self.earliest
+            > datetime.fromtimestamp(max(int(self.cursor) / 1000, 0)).date()
         ):
             self.finished = True
 
     def generate_params(
-            self,
+        self,
     ) -> dict:
         match self.favorite:
             case True:
                 return self.generate_favorite_params()
             case False:
                 return self.generate_post_params()
+        return {}
 
     def generate_favorite_params(self) -> dict:
         return self.params | {
@@ -220,50 +210,44 @@ class Account(API):
         return self.post_api, False, 99999
 
     def check_earliest(self, date_: str | float | int) -> date:
-        default_date = date(2016, 9, 20)  # 默认日期
-        if not date_:  # 如果没有提供日期，返回默认日期
-            return default_date
-        if isinstance(date_, (int, float)):
-            earliest = self.latest - timedelta(days=date_)  # 计算最早日期
-            assert isinstance(earliest, date)
-        elif isinstance(date_, str):
+        return self.check_date(date(2016, 9, 20), self.latest, _("最早"), date_)
+
+    def check_latest(self, date_: str | float | int) -> date:
+        return self.check_date(date.today(), date.today(), _("最晚"), date_)
+
+    def check_date(
+        self, default: date, start: date, tip: str, value: str | float | int
+    ) -> date:
+        if not value:
+            return default
+        if isinstance(value, (int, float)):
+            date_ = start - timedelta(days=value)
+        elif isinstance(value, str):
             try:
-                earliest = datetime.strptime(date_, "%Y/%m/%d").date()  # 解析日期
+                date_ = datetime.strptime(value, "%Y/%m/%d").date()
             except ValueError:
-                self.log.warning(_("作品最早发布日期 {date} 无效").format(date=date_))
-                return default_date  # 无效日期返回默认日期
+                self.log.warning(
+                    _("作品{tip}发布日期无效 {date}").format(tip=tip, date=value)
+                )
+                return default
         else:
             raise ValueError(
-                _("作品最早发布日期参数 {date} 类型错误").format(date=date_)
+                _("作品{tip}发布日期参数 {date} 类型错误").format(tip=tip, date=value)
             )
         self.log.info(
-            _("作品最早发布日期: {earliest_date}").format(earliest_date=earliest)
+            _("作品{tip}发布日期: {latest_date}").format(tip=tip, latest_date=date_)
         )
-        return earliest  # 返回 date 对象
-
-    def check_latest(self, date_: str) -> date:
-        default_date = date.today()  # 默认日期
-        if not date_:
-            return default_date
-        try:
-            latest = datetime.strptime(date_, "%Y/%m/%d").date()
-            self.log.info(
-                _("作品最晚发布日期: {latest_date}").format(latest_date=latest)
-            )
-            return latest
-        except ValueError:
-            self.log.warning(_("作品最晚发布日期无效 {date}").format(date=date_))
-            return default_date
+        return date_  # 返回 date 对象
 
     def check_response(
-            self,
-            data_dict: dict,
-            data_key: str,
-            error_text="",
-            cursor="cursor",
-            has_more="has_more",
-            *args,
-            **kwargs,
+        self,
+        data_dict: dict,
+        data_key: str,
+        error_text="",
+        cursor="cursor",
+        has_more="has_more",
+        *args,
+        **kwargs,
     ):
         try:
             if not (d := data_dict[data_key]):
@@ -284,6 +268,8 @@ class Account(API):
 
 
 async def test():
+    from src.testers import Params
+
     async with Params() as params:
         i = Account(
             params,

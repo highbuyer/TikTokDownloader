@@ -1,3 +1,4 @@
+from shutil import move
 from typing import TYPE_CHECKING
 
 from .csv import CSVLogger
@@ -6,6 +7,8 @@ from .text import BaseTextLogger
 from .xlsx import XLSXLogger
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from ..config import Parameter
 
 __all__ = ["RecordManager"]
@@ -123,7 +126,7 @@ class RecordManager:
             "TEXT",
         ),
         (
-            "origin_cover",
+            "static_cover",
             "静态封面",
             "TEXT",
         ),
@@ -613,13 +616,20 @@ class RecordManager:
     }
 
     def run(
-            self,
-            parameter: "Parameter",
-            folder="",
-            type_="detail",
-            blank=False,
+        self,
+        parameter: "Parameter",
+        folder="",
+        type_="detail",
+        blank=False,
     ):
-        root = parameter.root.joinpath(parameter.CLEANER.filter_name(folder, "Data"))
+        root = parameter.root.joinpath(
+            name := parameter.CLEANER.filter_name(folder, "Data")
+        )
+        self.compatible(
+            parameter.root,
+            root,
+            name,
+        )
         root.mkdir(exist_ok=True)
         params = self.LoggerParams[type_]
         logger = (
@@ -628,3 +638,12 @@ class RecordManager:
             else self.DataLogger.get(parameter.storage_format, BaseTextLogger)
         )
         return root, params, logger
+
+    @staticmethod
+    def compatible(
+        root: "Path",
+        path: "Path",
+        name: str,
+    ):
+        if (old := root.parent.joinpath(name)).exists() and not path.exists():
+            move(old, path)

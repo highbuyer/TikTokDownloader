@@ -1,8 +1,8 @@
 from asyncio import CancelledError
 from contextlib import suppress
+from shutil import move
 
-from aiosqlite import Row
-from aiosqlite import connect
+from aiosqlite import Row, connect
 
 from ..custom import PROJECT_ROOT
 
@@ -10,10 +10,10 @@ __all__ = ["Database"]
 
 
 class Database:
-    __FILE = "TikTokDownloader.db"
+    __FILE = "DouK-Downloader.db"
 
     def __init__(
-            self,
+        self,
     ):
         self.file = PROJECT_ROOT.joinpath(self.__FILE)
         self.database = None
@@ -67,9 +67,9 @@ class Database:
         return await self.cursor.fetchall()
 
     async def update_config_data(
-            self,
-            name: str,
-            value: int,
+        self,
+        name: str,
+        value: int,
     ):
         await self.database.execute(
             "REPLACE INTO config_data (NAME, VALUE) VALUES (?,?)", (name, value)
@@ -77,9 +77,9 @@ class Database:
         await self.database.commit()
 
     async def update_option_data(
-            self,
-            name: str,
-            value: str,
+        self,
+        name: str,
+        value: str,
     ):
         await self.database.execute(
             "REPLACE INTO option_data (NAME, VALUE) VALUES (?,?)", (name, value)
@@ -125,6 +125,7 @@ class Database:
         await self.database.commit()
 
     async def __aenter__(self):
+        self.compatible()
         await self.__connect_database()
         return self
 
@@ -135,3 +136,9 @@ class Database:
 
     async def __aexit__(self, exc_type, exc_value, traceback):
         await self.close()
+
+    def compatible(self):
+        if (
+            old := PROJECT_ROOT.parent.joinpath(self.__FILE)
+        ).exists() and not self.file.exists():
+            move(old, self.file)

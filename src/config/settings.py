@@ -1,17 +1,17 @@
-from json import dump
-from json import load
+from json import dump, load
 from json.decoder import JSONDecodeError
 from platform import system
+from shutil import move
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
-from ..custom import ERROR
-from ..custom.platform_ua import update_settings_with_platform_ua, get_platform_info, get_current_platform
+from ..custom import USERAGENT
 from ..translation import _
 
 if TYPE_CHECKING:
-    from ..tools import ColorfulConsole
     from pathlib import Path
+
+    from ..tools import ColorfulConsole
 
 __all__ = ["Settings"]
 
@@ -64,6 +64,8 @@ class Settings:
         "root": "",
         "folder_name": "Download",
         "name_format": "create_time type nickname desc",
+        "desc_length": 64,
+        "name_length": 128,
         "date_format": "%Y-%m-%d %H:%M:%S",
         "split": "-",
         "folder_mode": False,
@@ -73,9 +75,9 @@ class Settings:
         "cookie": "",
         "cookie_tiktok": "",
         "dynamic_cover": False,
-        "original_cover": False,
-        "proxy": None,
-        "proxy_tiktok": None,
+        "static_cover": False,
+        "proxy": "",
+        "proxy_tiktok": "",
         "twc_tiktok": "",
         "download": True,
         "max_size": 0,
@@ -85,27 +87,71 @@ class Settings:
         "max_pages": 0,
         "run_command": "",
         "ffmpeg": "",
+        "live_qualities": "",
         "douyin_platform": True,
         "tiktok_platform": True,
-        "browser_info": {},  # 将通过platform_ua模块填充
-        "browser_info_tiktok": {},  # 将通过platform_ua模块填充
+        "browser_info": {
+            "User-Agent": USERAGENT,
+            "pc_libra_divert": "Windows",
+            "browser_language": "zh-CN",
+            "browser_platform": "Win32",
+            "browser_name": "Chrome",
+            "browser_version": "139.0.0.0",
+            "engine_name": "Blink",
+            "engine_version": "139.0.0.0",
+            "os_name": "Windows",
+            "os_version": "10",
+            "webid": "",
+        },
+        "browser_info_tiktok": {
+            "User-Agent": USERAGENT,
+            "app_language": "zh-Hans",
+            "browser_language": "zh-CN",
+            "browser_name": "Mozilla",
+            "browser_platform": "Win32",
+            "browser_version": "5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "language": "zh-Hans",
+            "os": "windows",
+            "priority_region": "US",
+            "region": "US",
+            "tz_name": "Asia/Shanghai",
+            "webcast_language": "zh-Hans",
+            "device_id": "",
+        },
     }  # 默认配置
+    rename_params = (
+        (
+            "default_mode",
+            "run_command",
+            "",
+        ),
+        (
+            "update_cookie",
+            "douyin_platform",
+            True,
+        ),
+        (
+            "update_cookie_tiktok",
+            "tiktok_platform",
+            True,
+        ),
+        (
+            "original_cover",
+            "static_cover",
+            False,
+        ),
+    )  # 兼容旧版本配置文件
 
     def __init__(self, root: "Path", console: "ColorfulConsole"):
-        self.file = root.joinpath("./settings.json")  # 配置文件
+        self.root = root
+        self.file = "settings.json"
+        self.path = root.joinpath(self.file)  # 配置文件
         self.console = console
-        # 根据当前平台初始化默认浏览器配置
-        platform_info = get_platform_info()
-        current_platform = get_current_platform()
-        if current_platform in platform_info:
-            self.default["browser_info"] = platform_info[current_platform]["browser_info"].copy()
-            self.default["browser_info_tiktok"] = platform_info[current_platform]["browser_info_tiktok"].copy()
 
     def __create(self) -> dict:
         """创建默认配置文件"""
-        default_settings = update_settings_with_platform_ua(self.default.copy())
-        with self.file.open("w", encoding=self.encode) as f:
-            dump(default_settings, f, indent=4, ensure_ascii=False)
+        with self.path.open("w", encoding=self.encode) as f:
+            dump(self.default, f, indent=4, ensure_ascii=False)
         self.console.info(
             _(
                 "创建默认配置文件 settings.json 成功！\n"
@@ -113,51 +159,41 @@ class Settings:
                 "建议根据实际使用需求修改配置文件 settings.json！\n"
             ),
         )
-        return default_settings
+        return self.default
 
     def read(self) -> dict:
         """读取配置文件，如果没有配置文件，则生成配置文件"""
+        self.compatible()
         try:
-            if self.file.exists():
-                with self.file.open("r", encoding=self.encode) as f:
-                    settings_data = self.__check(load(f))
-                    # 根据当前平台更新User-Agent
-                    settings_data = update_settings_with_platform_ua(settings_data)
-                    # 保存更新后的设置
-                    self.update(settings_data)
-                    return settings_data
+            if self.path.exists():
+                with self.path.open("r", encoding=self.encode) as f:
+                    return self.__check(load(f))
             return self.__create()  # 生成的默认配置文件必须设置 cookie 才可以正常运行
         except JSONDecodeError:
             self.console.error(
                 _("配置文件 settings.json 格式错误，请检查 JSON 格式！"),
             )
-            default_settings = update_settings_with_platform_ua(self.default.copy())
-            return default_settings  # 读取配置文件发生错误时返回带平台UA的默认配置
+            return self.default  # 读取配置文件发生错误时返回空配置
 
     def __check(self, data: dict) -> dict:
-        default_keys = self.default.keys()
         data = self.__compatible_with_old_settings(data)
-        data_keys = set(data.keys())
-        if not (miss := default_keys - data_keys):
-            return data
-        if (
-                self.console.input(
-                    _(
-                        "配置文件 settings.json 缺少 {missing_params} 参数，是否需要生成默认配置文件(YES/NO): "
-                    ).format(missing_params=", ".join(miss)),
-                style=ERROR,
-                ).upper()
-                == "YES"
-        ):
-            self.__create()
-        self.console.warning(
-            _("本次运行将会使用各项参数默认值，程序功能可能无法正常使用！"),
-        )
-        return self.default
+        update = False
+        for i, j in self.default.items():
+            if i not in data:
+                data[i] = j
+                update = True
+                self.console.info(
+                    _("配置文件 settings.json 缺少参数 {i}，已自动添加该参数！").format(
+                        i=i
+                    ),
+                )
+        if update:
+            self.update(data)
+        return data
 
     def update(self, settings: dict | SimpleNamespace):
         """更新配置文件"""
-        with self.file.open("w", encoding=self.encode) as f:
+        with self.path.open("w", encoding=self.encode) as f:
             dump(
                 settings if isinstance(settings, dict) else vars(settings),
                 f,
@@ -169,41 +205,28 @@ class Settings:
         )
 
     def __compatible_with_old_settings(
-            self,
-            data: dict,
+        self,
+        data: dict,
     ) -> dict:
         """兼容旧版本配置文件"""
-        if "default_mode" in data:
-            self.console.info(
-                "配置文件 default_mode 参数已变更为 run_command 参数，请注意修改配置文件！"
-            )
-            data["run_command"] = data.get(
-                "run_command",
-                data.get(
-                    "default_mode",
-                    "",
-                ),
-            )  # TODO: 暂时兼容旧版本配置文件，未来将会移除
-        if "update_cookie" in data:
-            self.console.info(
-                "配置文件 update_cookie 参数已变更为 douyin_platform 参数，请注意修改配置文件！"
-            )
-            data["douyin_platform"] = data.get(
-                "douyin_platform",
-                data.get(
-                    "update_cookie",
-                    True,
-                ),
-            )  # TODO: 暂时兼容旧版本配置文件，未来将会移除
-        if "update_cookie_tiktok" in data:
-            self.console.info(
-                "配置文件 update_cookie_tiktok 参数已变更为 tiktok_platform 参数，请注意修改配置文件！"
-            )
-            data["tiktok_platform"] = data.get(
-                "tiktok_platform",
-                data.get(
-                    "update_cookie_tiktok",
-                    True,
-                ),
-            )  # TODO: 暂时兼容旧版本配置文件，未来将会移除
+        for old, new_, default in self.rename_params:
+            if old in data:
+                self.console.info(
+                    _(
+                        "配置文件 {old} 参数已变更为 {new} 参数，请注意修改配置文件！"
+                    ).format(old=old, new=new_),
+                )
+                data[new_] = data.get(
+                    new_,
+                    data.get(
+                        old,
+                        default,
+                    ),
+                )
         return data
+
+    def compatible(self):
+        if (
+            old := self.root.parent.joinpath(self.file)
+        ).exists() and not self.path.exists():
+            move(old, self.path)
